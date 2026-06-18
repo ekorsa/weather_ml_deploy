@@ -38,6 +38,8 @@ ml:
       memory: 512Mi
 
 postgresql:
+  metrics:
+    enabled: false    # disables postgres-exporter sidecar — one less image to pull
   primary:
     resources:
       requests:
@@ -45,6 +47,9 @@ postgresql:
         memory: 128Mi
 
 redis:
+  architecture: standalone    # no replica pods — one less image to pull
+  metrics:
+    enabled: false            # disables redis-exporter sidecar
   master:
     resources:
       requests:

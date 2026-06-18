@@ -1,0 +1,35 @@
+# Terraform state and downloaded providers
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+*.tfplan
+
+# terraform.tfvars may contain real secrets — use terraform.tfvars.example as template
+terraform.tfvars
+terraform/*.tfvars
+!terraform/terraform.tfvars.example
+
+# Helm chart dependency tarballs (downloaded by `helm dependency update`)
+helm/weather-ml/charts/*.tgz
+
+# Secrets and credentials
+*.pem
+*.key
+kubeconfig
+.env
+*.env.local
+.azure/
+
+# Claude Code project-local overrides (personal, not for the team)
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo

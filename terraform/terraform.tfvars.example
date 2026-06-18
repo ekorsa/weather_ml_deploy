@@ -1,0 +1,16 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit real values.
+
+resource_group_name  = "weather-ml-rg"
+location             = "westeurope"
+cluster_name         = "weather-ml-aks"
+
+# Must be globally unique (5-50 alphanumeric chars, no hyphens)
+acr_name             = "weathermlacr"
+
+# Must be globally unique (3-24 chars, lowercase letters and numbers only)
+storage_account_name = "weathermlmodels"
+
+node_count           = 2
+node_vm_size         = "Standard_D2s_v3"
+kubernetes_version   = "1.29"

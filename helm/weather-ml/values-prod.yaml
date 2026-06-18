@@ -1,0 +1,27 @@
+# Production overrides — applied on top of values.yaml
+# Usage: helm upgrade --install ... -f values.yaml -f values-prod.yaml
+
+api:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+ingress:
+  host: weather-ml.yourdomain.com   # replace with real domain
+  tls:
+    enabled: true
+    secretName: weather-ml-tls
+
+ml:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi

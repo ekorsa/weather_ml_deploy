@@ -1,0 +1,52 @@
+# Minikube overrides — use instead of values-prod.yaml for local testing:
+#
+#   helm upgrade --install weather-ml ./helm/weather-ml \
+#     -f values.yaml -f values-minikube.yaml \
+#     --set image.registry=<your-local-or-dockerhub-registry> \
+#     --set monitoring.serviceMonitor.enabled=false
+
+api:
+  replicaCount: 1
+
+# Use minikube's built-in "standard" StorageClass instead of Azure Files
+persistence:
+  storageClass: standard
+  accessMode: ReadWriteOnce    # standard StorageClass is RWO, not RWX
+
+ingress:
+  enabled: true
+  className: nginx              # enable with: minikube addons enable ingress
+  host: weather-ml.local        # add to /etc/hosts: $(minikube ip) weather-ml.local
+  tls:
+    enabled: false
+
+# Disable ServiceMonitors — Prometheus Operator CRDs are not installed by default
+monitoring:
+  serviceMonitor:
+    enabled: false
+  pushgateway:
+    enabled: true
+
+# Lighter resource limits for a local cluster
+ml:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+postgresql:
+  primary:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+redis:
+  master:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi

@@ -1,0 +1,107 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  registry: ""          # e.g. weathermlacr.azurecr.io — set via --set or CI/CD
+  pullPolicy: IfNotPresent
+
+# ── API ──────────────────────────────────────────────────────────────────────
+api:
+  image:
+    repository: api
+    tag: "latest"
+  replicaCount: 2
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ── ML CronJobs ───────────────────────────────────────────────────────────────
+ml:
+  image:
+    repository: ml
+    tag: "latest"
+  fetch:
+    schedule: "0 * * * *"      # fetch_weather.py — every hour at :00
+  train:
+    schedule: "0 2 * * *"      # train.py          — daily at 02:00 UTC
+  predict:
+    schedule: "30 * * * *"     # predict.py         — every hour at :30 (after fetch)
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  host: weather-ml.example.com   # replace with your domain
+  tls:
+    enabled: false
+    secretName: weather-ml-tls
+
+# ── Shared PVC ────────────────────────────────────────────────────────────────
+# train.py writes model.pkl here; predict.py and api.py read it.
+# Requires Azure Files (RWX) — storageClass azurefile is pre-installed on AKS.
+persistence:
+  enabled: true
+  storageClass: azurefile
+  accessMode: ReadWriteMany
+  size: 1Gi
+  existingClaim: ""    # set to reuse a pre-existing PVC
+
+# ── Env config ────────────────────────────────────────────────────────────────
+config:
+  postgresHost: "weather-ml-postgresql"    # Bitnami subchart ClusterIP service
+  postgresPort: "5432"
+  postgresDb: "weather_db"
+  postgresUser: "postgres"
+  redisHost: "weather-ml-redis-master"     # Bitnami subchart master service
+  redisPort: "6379"
+
+secrets:
+  postgresPassword: "changeme"
+  redisPassword: "changeme"
+
+# ── Bitnami postgresql subchart ───────────────────────────────────────────────
+postgresql:
+  enabled: true
+  auth:
+    username: postgres
+    password: changeme
+    database: weather_db
+  metrics:
+    enabled: true    # deploys prometheus/postgres-exporter sidecar
+
+# ── Bitnami redis subchart ────────────────────────────────────────────────────
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: changeme
+  master:
+    persistence:
+      enabled: true
+  metrics:
+    enabled: true    # deploys oliver006/redis_exporter sidecar
+
+# ── Monitoring ────────────────────────────────────────────────────────────────
+monitoring:
+  serviceMonitor:
+    enabled: true     # requires Prometheus Operator (kube-prometheus-stack)
+    interval: "30s"
+  pushgateway:
+    enabled: true
+    port: 9091

@@ -1,0 +1,36 @@
+grafana:
+  enabled: true
+  adminPassword: "changeme"    # override via --set in production
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.example.com    # replace with your domain
+
+prometheus:
+  prometheusSpec:
+    # Discover ServiceMonitors from all namespaces regardless of Helm release labels
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    retention: 30d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          storageClassName: managed-csi    # default AKS Azure Disk StorageClass
+          resources:
+            requests:
+              storage: 10Gi
+    # postgres-exporter and redis-exporter ServiceMonitors are created automatically
+    # by the Bitnami subcharts when metrics.enabled=true — no extra scrape config needed
+    additionalScrapeConfigs: []
+
+alertmanager:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true

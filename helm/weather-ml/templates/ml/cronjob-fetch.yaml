@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "weather-ml.fullname" . }}-fetch
+  labels:
+    {{- include "weather-ml.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ml-fetch
+spec:
+  schedule: {{ .Values.ml.fetch.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "weather-ml.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: ml-fetch
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: fetch
+              image: {{ include "weather-ml.mlImage" . }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["python", "fetch_weather.py"]
+              envFrom:
+                - configMapRef:
+                    name: {{ include "weather-ml.fullname" . }}-config
+                - secretRef:
+                    name: {{ include "weather-ml.fullname" . }}-secret
+              resources:
+                {{- toYaml .Values.ml.resources | nindent 16 }}

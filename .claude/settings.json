@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(terraform *)",
+      "Bash(kubectl *)",
+      "Bash(helm *)",
+      "Bash(az *)",
+      "Bash(docker *)",
+      "Bash(minikube *)",
+      "Bash(find *)",
+      "Bash(ls *)",
+      "Bash(grep *)",
+      "Bash(cat *)",
+      "Bash(git status)",
+      "Bash(git log *)",
+      "Bash(git diff *)"
+    ]
+  }
+}

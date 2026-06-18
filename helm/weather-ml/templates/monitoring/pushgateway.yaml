@@ -1,0 +1,72 @@
+{{- if .Values.monitoring.pushgateway.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "weather-ml.fullname" . }}-pushgateway
+  labels:
+    {{- include "weather-ml.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pushgateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "weather-ml.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: pushgateway
+  template:
+    metadata:
+      labels:
+        {{- include "weather-ml.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: pushgateway
+    spec:
+      containers:
+        - name: pushgateway
+          image: prom/pushgateway:v1.8.0
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.monitoring.pushgateway.port }}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+# Service name is fixed to "pushgateway" to match the hardcoded address in predict.py:
+#   push_to_gateway('pushgateway:9091', ...)
+apiVersion: v1
+kind: Service
+metadata:
+  name: pushgateway
+  labels:
+    {{- include "weather-ml.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pushgateway
+spec:
+  ports:
+    - name: metrics
+      port: {{ .Values.monitoring.pushgateway.port }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "weather-ml.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: pushgateway
+---
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "weather-ml.fullname" . }}-pushgateway
+  labels:
+    {{- include "weather-ml.labels" . | nindent 4 }}
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      {{- include "weather-ml.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: pushgateway
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+      honorLabels: true    # preserve job/instance labels pushed by ML CronJobs
+{{- end }}
+{{- end }}

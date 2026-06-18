@@ -1,0 +1,16 @@
+apiVersion: v2
+name: weather-ml
+description: Kubernetes deployment for the Weather ML pipeline (FastAPI + ML CronJobs + monitoring)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: postgresql
+    version: "14.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: redis
+    version: "19.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled

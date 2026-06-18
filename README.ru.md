@@ -162,10 +162,95 @@ kubectl logs pvc-check -n weather-ml
 kubectl delete pod pvc-check -n weather-ml
 ```
 
-### 11. Удалить стенд
+### 11. Установить и проверить Prometheus + Grafana (опционально)
+
+#### Установка
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+helm upgrade --install kube-prometheus-stack \
+  prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace \
+  --values monitoring/kube-prometheus-stack-values.yaml
+```
+
+Дождаться готовности подов (~2 мин):
+
+```bash
+kubectl get pods -n monitoring -w
+```
+
+Все поды должны перейти в статус `Running`:
+```
+NAME                                                   READY   STATUS
+alertmanager-kube-prometheus-stack-alertmanager-0      2/2     Running
+kube-prometheus-stack-grafana-xxxxxxxxx-xxxxx          3/3     Running
+kube-prometheus-stack-operator-xxxxxxxxx-xxxxx         1/1     Running
+kube-prometheus-stack-prometheus-node-exporter-xxxxx   1/1     Running
+prometheus-kube-prometheus-stack-prometheus-0          2/2     Running
+```
+
+#### Включить ServiceMonitors для приложения
+
+Передеплоить с включёнными ServiceMonitors, чтобы Prometheus подхватил метрики:
+
+```bash
+helm upgrade weather-ml ./helm/weather-ml \
+  --namespace weather-ml \
+  --reuse-values \
+  --set monitoring.serviceMonitor.enabled=true
+```
+
+#### Открыть Prometheus UI
+
+```bash
+kubectl port-forward svc/kube-prometheus-stack-prometheus 9090:9090 -n monitoring
+```
+
+Открыть в браузере: **http://localhost:9090**
+
+Полезные запросы в Prometheus UI:
+
+| Запрос | Что показывает |
+|--------|----------------|
+| `up` | Все таргеты и их статус |
+| `ml_prediction_value` | Последнее предсказание температуры из `predict.py` |
+| `http_requests_total` | Общее число запросов к FastAPI |
+| `process_resident_memory_bytes{job="weather-ml"}` | Потребление памяти API |
+
+Проверка через curl:
+```bash
+# Проверить что таргеты скрейпятся (искать weather-ml и pushgateway)
+curl -s http://localhost:9090/api/v1/targets | python3 -m json.tool | grep -E '"job"|"health"'
+
+# Запросить ml_prediction_value
+curl -s 'http://localhost:9090/api/v1/query?query=ml_prediction_value' | python3 -m json.tool
+```
+
+#### Открыть Grafana UI
+
+```bash
+kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n monitoring
+```
+
+Открыть в браузере: **http://localhost:3000**
+
+Логин и пароль по умолчанию: **admin / prom-operator**
+
+> Если в `monitoring/kube-prometheus-stack-values.yaml` был изменён `grafana.adminPassword` —
+> использовать тот пароль.
+
+В Grafana: **Explore → выбрать datasource Prometheus → ввести `ml_prediction_value`** —
+отобразится график последних предсказаний.
+
+### 12. Удалить стенд
 
 ```bash
 helm uninstall weather-ml -n weather-ml
+helm uninstall kube-prometheus-stack -n monitoring
+kubectl delete namespace weather-ml monitoring
 minikube stop
 ```
 

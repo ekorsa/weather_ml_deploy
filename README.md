@@ -167,10 +167,95 @@ kubectl port-forward svc/pushgateway 9091:9091 -n weather-ml &
 curl http://localhost:9091/metrics | grep ml_prediction
 ```
 
-### 11. Teardown
+### 11. Install and verify Prometheus + Grafana (optional)
+
+#### Install
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+helm upgrade --install kube-prometheus-stack \
+  prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace \
+  --values monitoring/kube-prometheus-stack-values.yaml
+```
+
+Wait for all pods to become ready (takes ~2 min):
+
+```bash
+kubectl get pods -n monitoring -w
+```
+
+All pods should reach `Running` status:
+```
+NAME                                                   READY   STATUS
+alertmanager-kube-prometheus-stack-alertmanager-0      2/2     Running
+kube-prometheus-stack-grafana-xxxxxxxxx-xxxxx          3/3     Running
+kube-prometheus-stack-operator-xxxxxxxxx-xxxxx         1/1     Running
+kube-prometheus-stack-prometheus-node-exporter-xxxxx   1/1     Running
+prometheus-kube-prometheus-stack-prometheus-0          2/2     Running
+```
+
+#### Enable ServiceMonitors for the weather-ml app
+
+Re-deploy with ServiceMonitors enabled so Prometheus discovers the app metrics:
+
+```bash
+helm upgrade weather-ml ./helm/weather-ml \
+  --namespace weather-ml \
+  --reuse-values \
+  --set monitoring.serviceMonitor.enabled=true
+```
+
+#### Access Prometheus UI
+
+```bash
+kubectl port-forward svc/kube-prometheus-stack-prometheus 9090:9090 -n monitoring
+```
+
+Open in browser: **http://localhost:9090**
+
+Useful queries to run in the Prometheus UI:
+
+| Query | What it shows |
+|-------|--------------|
+| `up` | All scraped targets and their status |
+| `ml_prediction_value` | Last temperature prediction from `predict.py` |
+| `http_requests_total` | Total requests to the FastAPI |
+| `process_resident_memory_bytes{job="weather-ml"}` | API memory usage |
+
+Or verify via curl:
+```bash
+# Check targets are being scraped (look for weather-ml and pushgateway)
+curl -s http://localhost:9090/api/v1/targets | python3 -m json.tool | grep -E '"job"|"health"'
+
+# Query ml_prediction_value
+curl -s 'http://localhost:9090/api/v1/query?query=ml_prediction_value' | python3 -m json.tool
+```
+
+#### Access Grafana UI
+
+```bash
+kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n monitoring
+```
+
+Open in browser: **http://localhost:3000**
+
+Default credentials: **admin / prom-operator**
+
+> If you changed `grafana.adminPassword` in `monitoring/kube-prometheus-stack-values.yaml`,
+> use that password instead.
+
+In Grafana: **Explore → select Prometheus datasource → run `ml_prediction_value`**
+to see the latest prediction on a graph.
+
+### 12. Teardown
 
 ```bash
 helm uninstall weather-ml -n weather-ml
+helm uninstall kube-prometheus-stack -n monitoring
+kubectl delete namespace weather-ml monitoring
 minikube stop
 ```
 

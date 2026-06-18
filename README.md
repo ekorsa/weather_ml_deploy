@@ -30,6 +30,90 @@ CronJobs ─┘
 **Shared PVC:** `train.py` saves `models/weather_model.pkl` to an Azure Files volume
 (ReadWriteMany). The same volume is mounted by the `predict` CronJob and the API pod.
 
+## Local testing with Minikube
+
+### 1. Start Minikube and enable Ingress
+
+```bash
+minikube start --memory=4096 --cpus=2
+minikube addons enable ingress
+```
+
+### 2. Build images inside Minikube's Docker daemon
+
+```bash
+eval $(minikube docker-env)
+docker build -f ../weather_ml/Dockerfile.api -t api:latest ../weather_ml
+docker build -f ../weather_ml/Dockerfile.ml  -t ml:latest  ../weather_ml
+```
+
+### 3. Add Bitnami repo and download chart dependencies
+
+```bash
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+helm dependency update helm/weather-ml
+```
+
+### 4. Deploy
+
+```bash
+helm upgrade --install weather-ml ./helm/weather-ml \
+  --namespace weather-ml --create-namespace \
+  --values helm/weather-ml/values.yaml \
+  --values helm/weather-ml/values-minikube.yaml \
+  --set image.registry="" \
+  --set image.pullPolicy=Never \
+  --set secrets.postgresPassword=testpass \
+  --set secrets.redisPassword=testpass \
+  --set postgresql.auth.password=testpass \
+  --set redis.auth.password=testpass
+```
+
+### 5. Add DNS entry and verify
+
+```bash
+echo "$(minikube ip) weather-ml.local" | sudo tee -a /etc/hosts
+
+# Wait for pods
+kubectl get pods -n weather-ml -w
+
+# Check Ingress
+kubectl get ingress -n weather-ml
+
+# Test the API
+curl http://weather-ml.local/
+curl http://weather-ml.local/predictions
+```
+
+### 6. Run ML jobs manually (first-time setup)
+
+The CronJobs run on a schedule, but you need data before predictions work.
+Run them once in order:
+
+```bash
+kubectl create job --from=cronjob/weather-ml-fetch   fetch-1   -n weather-ml
+kubectl wait --for=condition=complete job/fetch-1 -n weather-ml --timeout=60s
+
+kubectl create job --from=cronjob/weather-ml-train   train-1   -n weather-ml
+kubectl wait --for=condition=complete job/train-1 -n weather-ml --timeout=120s
+
+kubectl create job --from=cronjob/weather-ml-predict predict-1 -n weather-ml
+kubectl wait --for=condition=complete job/predict-1 -n weather-ml --timeout=60s
+
+# Check predictions appeared in the DB
+curl http://weather-ml.local/predictions
+```
+
+### 7. Teardown
+
+```bash
+helm uninstall weather-ml -n weather-ml
+minikube stop
+```
+
+---
+
 ## Prerequisites
 
 | Tool | Version |

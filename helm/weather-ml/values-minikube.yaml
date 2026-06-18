@@ -38,8 +38,10 @@ ml:
       memory: 512Mi
 
 postgresql:
+  image:
+    tag: latest    # avoids stale Bitnami patch tags that get pruned from Docker Hub
   metrics:
-    enabled: false    # disables postgres-exporter sidecar — one less image to pull
+    enabled: false
   primary:
     resources:
       requests:
@@ -47,9 +49,11 @@ postgresql:
         memory: 128Mi
 
 redis:
-  architecture: standalone    # no replica pods — one less image to pull
+  image:
+    tag: latest    # same reason
+  architecture: standalone
   metrics:
-    enabled: false            # disables redis-exporter sidecar
+    enabled: false
   master:
     resources:
       requests:

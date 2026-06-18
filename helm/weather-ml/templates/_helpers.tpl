@@ -31,11 +31,19 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{- define "weather-ml.apiImage" -}}
+{{- if .Values.image.registry }}
 {{- printf "%s/%s:%s" .Values.image.registry .Values.api.image.repository .Values.api.image.tag }}
+{{- else }}
+{{- printf "%s:%s" .Values.api.image.repository .Values.api.image.tag }}
+{{- end }}
 {{- end }}
 
 {{- define "weather-ml.mlImage" -}}
+{{- if .Values.image.registry }}
 {{- printf "%s/%s:%s" .Values.image.registry .Values.ml.image.repository .Values.ml.image.tag }}
+{{- else }}
+{{- printf "%s:%s" .Values.ml.image.repository .Values.ml.image.tag }}
+{{- end }}
 {{- end }}
 
 {{/* Resolves to an existing claim name or the chart-managed PVC */}}

@@ -70,42 +70,104 @@ helm upgrade --install weather-ml ./helm/weather-ml \
   --set redis.auth.password=testpass
 ```
 
-### 5. Add DNS entry and verify
+### 5. Add DNS entry
 
 ```bash
 echo "$(minikube ip) weather-ml.local" | sudo tee -a /etc/hosts
-
-# Wait for pods
-kubectl get pods -n weather-ml -w
-
-# Check Ingress
-kubectl get ingress -n weather-ml
-
-# Test the API
-curl http://weather-ml.local/
-curl http://weather-ml.local/predictions
 ```
 
-### 6. Run ML jobs manually (first-time setup)
-
-The CronJobs run on a schedule, but you need data before predictions work.
-Run them once in order:
+### 6. Check all pods are Running
 
 ```bash
-kubectl create job --from=cronjob/weather-ml-fetch   fetch-1   -n weather-ml
-kubectl wait --for=condition=complete job/fetch-1 -n weather-ml --timeout=60s
+kubectl get pods -n weather-ml -w
+```
 
-kubectl create job --from=cronjob/weather-ml-train   train-1   -n weather-ml
-kubectl wait --for=condition=complete job/train-1 -n weather-ml --timeout=120s
+Expected output (all pods `Running` or `Completed`):
+```
+NAME                                       READY   STATUS    RESTARTS
+weather-ml-api-xxxxxxxxx-xxxxx             1/1     Running   0
+weather-ml-postgresql-0                    1/1     Running   0
+weather-ml-redis-master-0                  1/1     Running   0
+weather-ml-pushgateway-xxxxxxxxx-xxxxx     1/1     Running   0
+```
 
-kubectl create job --from=cronjob/weather-ml-predict predict-1 -n weather-ml
-kubectl wait --for=condition=complete job/predict-1 -n weather-ml --timeout=60s
+If a pod is not ready: `kubectl describe pod <pod-name> -n weather-ml`
 
-# Check predictions appeared in the DB
+### 7. Verify the API
+
+```bash
+# Root endpoint — should return {"message": "Weather ML API is running"}
+curl http://weather-ml.local/
+
+# Prometheus metrics exposed by the API
+curl http://weather-ml.local/metrics | head -20
+
+# Predictions endpoint — returns [] until predict job has run
 curl http://weather-ml.local/predictions
 ```
 
-### 7. Teardown
+### 8. Run the ML pipeline manually (first-time setup)
+
+CronJobs run on a schedule. For the first test, trigger them once **in order** —
+each step depends on the previous one:
+
+```bash
+# Step 1: fetch weather data from Open-Meteo API → Redis
+kubectl create job --from=cronjob/weather-ml-fetch fetch-1 -n weather-ml
+kubectl wait --for=condition=complete job/fetch-1 -n weather-ml --timeout=60s
+kubectl logs -n weather-ml -l job-name=fetch-1
+
+# Step 2: train model on Redis data → save model.pkl to PVC
+kubectl create job --from=cronjob/weather-ml-train train-1 -n weather-ml
+kubectl wait --for=condition=complete job/train-1 -n weather-ml --timeout=120s
+kubectl logs -n weather-ml -l job-name=train-1
+
+# Step 3: load model, predict next temperature → save to PostgreSQL
+kubectl create job --from=cronjob/weather-ml-predict predict-1 -n weather-ml
+kubectl wait --for=condition=complete job/predict-1 -n weather-ml --timeout=60s
+kubectl logs -n weather-ml -l job-name=predict-1
+```
+
+### 9. Verify end-to-end result
+
+```bash
+# Predictions must now contain at least one record
+curl http://weather-ml.local/predictions
+
+# Expected response (array with one prediction object):
+# [{"prediction": 18.42, "created_at": "2024-..."}]
+
+# Trigger prediction via API endpoint (uses subprocess internally)
+curl -X POST http://weather-ml.local/predict
+
+# Check PushGateway received the ML metric
+curl http://$(minikube ip):$(kubectl get svc pushgateway -n weather-ml \
+  -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "9091")/metrics \
+  | grep ml_prediction_value
+```
+
+### 10. Useful debug commands
+
+```bash
+# Stream API logs
+kubectl logs -n weather-ml -l app.kubernetes.io/component=api -f
+
+# Check why a job failed
+kubectl logs -n weather-ml -l job-name=train-1
+
+# Inspect the shared PVC (model file should appear after train-1)
+kubectl run pvc-check --image=busybox --restart=Never \
+  --overrides='{"spec":{"volumes":[{"name":"m","persistentVolumeClaim":{"claimName":"weather-ml-models"}}],"containers":[{"name":"c","image":"busybox","command":["ls","-lh","/models"],"volumeMounts":[{"mountPath":"/models","name":"m"}]}]}}' \
+  -n weather-ml
+kubectl logs pvc-check -n weather-ml
+kubectl delete pod pvc-check -n weather-ml
+
+# Port-forward to access PushGateway directly
+kubectl port-forward svc/pushgateway 9091:9091 -n weather-ml &
+curl http://localhost:9091/metrics | grep ml_prediction
+```
+
+### 11. Teardown
 
 ```bash
 helm uninstall weather-ml -n weather-ml

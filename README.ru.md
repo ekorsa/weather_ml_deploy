@@ -70,42 +70,99 @@ helm upgrade --install weather-ml ./helm/weather-ml \
   --set redis.auth.password=testpass
 ```
 
-### 5. Добавить DNS и проверить
+### 5. Добавить DNS-запись
 
 ```bash
 echo "$(minikube ip) weather-ml.local" | sudo tee -a /etc/hosts
-
-# Ждать пока поды поднимутся
-kubectl get pods -n weather-ml -w
-
-# Проверить Ingress
-kubectl get ingress -n weather-ml
-
-# Проверить API
-curl http://weather-ml.local/
-curl http://weather-ml.local/predictions
 ```
 
-### 6. Запустить ML джобы вручную (первый запуск)
-
-CronJob'ы работают по расписанию, но для первого предсказания нужны данные.
-Запустить один раз по порядку:
+### 6. Проверить что все поды Running
 
 ```bash
-kubectl create job --from=cronjob/weather-ml-fetch   fetch-1   -n weather-ml
-kubectl wait --for=condition=complete job/fetch-1 -n weather-ml --timeout=60s
+kubectl get pods -n weather-ml -w
+```
 
-kubectl create job --from=cronjob/weather-ml-train   train-1   -n weather-ml
-kubectl wait --for=condition=complete job/train-1 -n weather-ml --timeout=120s
+Ожидаемый результат (все поды в статусе `Running`):
+```
+NAME                                       READY   STATUS    RESTARTS
+weather-ml-api-xxxxxxxxx-xxxxx             1/1     Running   0
+weather-ml-postgresql-0                    1/1     Running   0
+weather-ml-redis-master-0                  1/1     Running   0
+weather-ml-pushgateway-xxxxxxxxx-xxxxx     1/1     Running   0
+```
 
-kubectl create job --from=cronjob/weather-ml-predict predict-1 -n weather-ml
-kubectl wait --for=condition=complete job/predict-1 -n weather-ml --timeout=60s
+Если под не стартует: `kubectl describe pod <имя-пода> -n weather-ml`
 
-# Проверить что предсказания появились в БД
+### 7. Проверить API
+
+```bash
+# Корневой эндпоинт — должен вернуть {"message": "Weather ML API is running"}
+curl http://weather-ml.local/
+
+# Метрики Prometheus, которые отдаёт API
+curl http://weather-ml.local/metrics | head -20
+
+# Предсказания — вернёт [] пока не отработал predict-job
 curl http://weather-ml.local/predictions
 ```
 
-### 7. Удалить стенд
+### 8. Запустить ML-пайплайн вручную (первый запуск)
+
+CronJob'ы работают по расписанию. При первом тесте запустить по порядку —
+каждый шаг зависит от предыдущего:
+
+```bash
+# Шаг 1: загрузить данные с Open-Meteo API → Redis
+kubectl create job --from=cronjob/weather-ml-fetch fetch-1 -n weather-ml
+kubectl wait --for=condition=complete job/fetch-1 -n weather-ml --timeout=60s
+kubectl logs -n weather-ml -l job-name=fetch-1
+
+# Шаг 2: обучить модель на данных из Redis → сохранить model.pkl на PVC
+kubectl create job --from=cronjob/weather-ml-train train-1 -n weather-ml
+kubectl wait --for=condition=complete job/train-1 -n weather-ml --timeout=120s
+kubectl logs -n weather-ml -l job-name=train-1
+
+# Шаг 3: загрузить модель, предсказать температуру → сохранить в PostgreSQL
+kubectl create job --from=cronjob/weather-ml-predict predict-1 -n weather-ml
+kubectl wait --for=condition=complete job/predict-1 -n weather-ml --timeout=60s
+kubectl logs -n weather-ml -l job-name=predict-1
+```
+
+### 9. Проверить сквозной результат
+
+```bash
+# В predictions должна появиться хотя бы одна запись
+curl http://weather-ml.local/predictions
+
+# Ожидаемый ответ (массив с одним объектом):
+# [{"prediction": 18.42, "created_at": "2024-..."}]
+
+# Запустить предсказание через API-эндпоинт (вызывает subprocess внутри)
+curl -X POST http://weather-ml.local/predict
+
+# Проверить что PushGateway получил ML-метрику
+kubectl port-forward svc/pushgateway 9091:9091 -n weather-ml &
+curl http://localhost:9091/metrics | grep ml_prediction_value
+```
+
+### 10. Полезные команды для отладки
+
+```bash
+# Стриминг логов API
+kubectl logs -n weather-ml -l app.kubernetes.io/component=api -f
+
+# Почему упал job
+kubectl logs -n weather-ml -l job-name=train-1
+
+# Проверить содержимое PVC (файл model.pkl должен появиться после train-1)
+kubectl run pvc-check --image=busybox --restart=Never \
+  --overrides='{"spec":{"volumes":[{"name":"m","persistentVolumeClaim":{"claimName":"weather-ml-models"}}],"containers":[{"name":"c","image":"busybox","command":["ls","-lh","/models"],"volumeMounts":[{"mountPath":"/models","name":"m"}]}]}}' \
+  -n weather-ml
+kubectl logs pvc-check -n weather-ml
+kubectl delete pod pvc-check -n weather-ml
+```
+
+### 11. Удалить стенд
 
 ```bash
 helm uninstall weather-ml -n weather-ml

@@ -212,7 +212,9 @@ if $WITH_PROMETHEUS; then
     prometheus-community/kube-prometheus-stack \
     --namespace "$MONITORING_NS" --create-namespace \
     --values monitoring/kube-prometheus-stack-values.yaml \
-    --set grafana.adminPassword=admin
+    --set grafana.adminPassword=admin \
+    --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=standard \
+    --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=2Gi
 
   info "Waiting for Prometheus and Grafana pods (~2 min)..."
   kubectl wait pod \

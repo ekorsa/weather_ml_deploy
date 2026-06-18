@@ -73,7 +73,9 @@ config:
 
 secrets:
   postgresPassword: "changeme"
-  redisPassword: "changeme"
+  # redisPassword is intentionally absent — the application connects to Redis
+  # without a password (train.py, fetch_weather.py, predict.py do not read
+  # REDIS_PASSWORD), so Redis auth must stay disabled.
 
 # ── Bitnami postgresql subchart ───────────────────────────────────────────────
 postgresql:
@@ -86,11 +88,11 @@ postgresql:
     enabled: true    # deploys prometheus/postgres-exporter sidecar
 
 # ── Bitnami redis subchart ────────────────────────────────────────────────────
+# auth.enabled is false because the application code does not pass a password
 redis:
   enabled: true
   auth:
-    enabled: true
-    password: changeme
+    enabled: false
   master:
     persistence:
       enabled: true

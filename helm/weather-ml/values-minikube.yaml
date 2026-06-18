@@ -2,8 +2,10 @@
 #
 #   helm upgrade --install weather-ml ./helm/weather-ml \
 #     -f values.yaml -f values-minikube.yaml \
-#     --set image.registry=<your-local-or-dockerhub-registry> \
-#     --set monitoring.serviceMonitor.enabled=false
+#     --set image.registry="" \
+#     --set image.pullPolicy=Never \
+#     --set secrets.postgresPassword=testpass \
+#     --set postgresql.auth.password=testpass
 
 api:
   replicaCount: 1

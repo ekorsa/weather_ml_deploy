@@ -121,8 +121,6 @@ jobs:
             --set api.image.tag=${{ needs.build-push.outputs.image_tag }} \
             --set ml.image.tag=${{ needs.build-push.outputs.image_tag }} \
             --set secrets.postgresPassword=${{ secrets.POSTGRES_PASSWORD }} \
-            --set secrets.redisPassword=${{ secrets.REDIS_PASSWORD }} \
             --set postgresql.auth.password=${{ secrets.POSTGRES_PASSWORD }} \
-            --set redis.auth.password=${{ secrets.REDIS_PASSWORD }} \
             --atomic \
             --timeout 10m

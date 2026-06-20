@@ -87,6 +87,12 @@ fi
 info "Enabling ingress addon..."
 minikube addons enable ingress
 
+info "Waiting for ingress-nginx controller to be ready..."
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+
 # ── Build images ──────────────────────────────────────────────────────────────
 
 section "Building Docker images inside minikube"
@@ -144,12 +150,12 @@ fi
 
 section "Waiting for pods to become ready"
 info "This may take 2-3 minutes on first run (image pulls)..."
-kubectl rollout status deployment/"$RELEASE-api" -n "$NAMESPACE" --timeout=180s
+kubectl rollout status deployment/"$RELEASE-api" -n "$NAMESPACE" --timeout=360s
 kubectl wait pod \
   --for=condition=ready \
   --selector=app.kubernetes.io/instance="$RELEASE" \
   --namespace="$NAMESPACE" \
-  --timeout=180s
+  --timeout=360s
 info "All pods are ready."
 
 # ── Verify API ────────────────────────────────────────────────────────────────

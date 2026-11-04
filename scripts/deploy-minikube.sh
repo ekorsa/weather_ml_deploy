@@ -11,8 +11,12 @@ set -euo pipefail
 #
 # Run from the repo root:
 #   cd weather_ml_deploy && ./scripts/deploy-minikube.sh
+#
+# Runs in a dedicated minikube profile (default: weather-ml), isolated from
+# other clusters. Override: PROFILE=my-profile ./scripts/deploy-minikube.sh
 # ─────────────────────────────────────────────────────────────────────────────
 
+PROFILE="${PROFILE:-weather-ml}"
 NAMESPACE="weather-ml"
 RELEASE="weather-ml"
 CHART="./helm/weather-ml"
@@ -47,6 +51,11 @@ require() {
   command -v "$1" &>/dev/null || err "'$1' not found. Install it and retry."
 }
 
+# Pin every call to the profile's cluster, regardless of the current kube context.
+minikube() { command minikube -p "$PROFILE" "$@"; }
+kubectl()  { command kubectl --context "$PROFILE" "$@"; }
+helm()     { command helm --kube-context "$PROFILE" "$@"; }
+
 # ── Teardown ──────────────────────────────────────────────────────────────────
 
 if $TEARDOWN; then
@@ -57,7 +66,7 @@ if $TEARDOWN; then
   kubectl delete namespace "$MONITORING_NS" --ignore-not-found
   info "Removing /etc/hosts entry for $HOST"
   sudo sed -i "/$HOST/d" /etc/hosts
-  info "Done. Run 'minikube stop' to shut down the cluster."
+  info "Done. Run 'minikube stop -p $PROFILE' to shut down the cluster."
   exit 0
 fi
 
@@ -76,12 +85,12 @@ info "All prerequisites present."
 
 # ── Start minikube ────────────────────────────────────────────────────────────
 
-section "Starting minikube"
+section "Starting minikube (profile: $PROFILE)"
 if minikube status | grep -q "Running"; then
-  info "minikube is already running."
+  info "minikube profile $PROFILE is already running."
 else
   minikube start --memory=4096 --cpus=2
-  info "minikube started."
+  info "minikube profile $PROFILE started."
 fi
 
 info "Enabling ingress addon..."

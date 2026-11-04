@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "weather-ml.fullname" . }}-predict
+  labels:
+    {{- include "weather-ml.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ml-predict
+spec:
+  schedule: {{ .Values.ml.predict.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "weather-ml.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: ml-predict
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: predict
+              image: {{ include "weather-ml.mlImage" . }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["python", "predict.py"]
+              envFrom:
+                - configMapRef:
+                    name: {{ include "weather-ml.fullname" . }}-config
+                - secretRef:
+                    name: {{ include "weather-ml.fullname" . }}-secret
+              volumeMounts:
+                - name: models
+                  mountPath: /app/models
+              resources:
+                {{- toYaml .Values.ml.resources | nindent 16 }}
+          volumes:
+            - name: models
+              {{- if .Values.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ include "weather-ml.modelsPvcName" . }}
+              {{- else }}
+              emptyDir: {}
+              {{- end }}

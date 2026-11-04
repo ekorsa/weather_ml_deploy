@@ -19,15 +19,27 @@ spec:
             app.kubernetes.io/component: ml-fetch
         spec:
           restartPolicy: OnFailure
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
           containers:
             - name: fetch
               image: {{ include "weather-ml.mlImage" . }}
               imagePullPolicy: {{ .Values.image.pullPolicy }}
               command: ["python", "fetch_weather.py"]
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
               envFrom:
                 - configMapRef:
                     name: {{ include "weather-ml.fullname" . }}-config
                 - secretRef:
                     name: {{ include "weather-ml.fullname" . }}-secret
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.ml.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir:
+                medium: Memory
+                sizeLimit: {{ .Values.tmpVolume.sizeLimit }}

@@ -5,6 +5,25 @@ image:
   registry: ""          # e.g. weathermlacr.azurecr.io — set via --set or CI/CD
   pullPolicy: IfNotPresent
 
+# ── Security (applied to API and all ML CronJobs) ────────────────────────────
+# UID must be numeric: the image's USER is the name "appuser", which
+# Kubernetes cannot verify against runAsNonRoot.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000           # lets the train job write to the models PVC
+
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+
+# Writable /tmp on a read-only root filesystem (tmpfs, counts toward memory limit)
+tmpVolume:
+  sizeLimit: 64Mi
+
 # ── API ──────────────────────────────────────────────────────────────────────
 api:
   image:

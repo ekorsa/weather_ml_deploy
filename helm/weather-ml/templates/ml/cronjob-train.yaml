@@ -19,11 +19,15 @@ spec:
             app.kubernetes.io/component: ml-train
         spec:
           restartPolicy: OnFailure
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
           containers:
             - name: train
               image: {{ include "weather-ml.mlImage" . }}
               imagePullPolicy: {{ .Values.image.pullPolicy }}
               command: ["python", "train.py"]
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
               envFrom:
                 - configMapRef:
                     name: {{ include "weather-ml.fullname" . }}-config
@@ -32,6 +36,8 @@ spec:
               volumeMounts:
                 - name: models
                   mountPath: /app/models
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.ml.resources | nindent 16 }}
           volumes:
@@ -42,3 +48,7 @@ spec:
               {{- else }}
               emptyDir: {}
               {{- end }}
+            - name: tmp
+              emptyDir:
+                medium: Memory
+                sizeLimit: {{ .Values.tmpVolume.sizeLimit }}
